@@ -76,8 +76,26 @@ class SelectorBIC(ModelSelector):
         """
         warnings.filterwarnings("ignore", category=DeprecationWarning)
 
-        # TODO implement model selection based on BIC scores
-        raise NotImplementedError
+        best_bic_score = np.inf
+        best_model = None
+
+        for n_components in range(self.min_n_components, self.max_n_components+1):
+            try: # There is a bug in hlmmlearn, so it must catch exception.
+                model = self.base_model(n_components)
+                logL = model.score(self.X, self.lengths)
+
+                n_data = sum(self.lengths)
+                n_parameters = float(n_components ** 2 + 2 * n_components * n_data)
+                bic_score = -2.0 * logL + n_parameters * np.log(n_data)
+
+                if bic_score < best_bic_score:
+                    best_bic_score = bic_score
+                    best_model = model
+            except Exception:
+                pass
+
+        return best_model
+
 
 
 class SelectorDIC(ModelSelector):
@@ -93,8 +111,31 @@ class SelectorDIC(ModelSelector):
     def select(self):
         warnings.filterwarnings("ignore", category=DeprecationWarning)
 
-        # TODO implement model selection based on DIC scores
-        raise NotImplementedError
+        best_dic_score = -np.inf
+        best_model = None
+
+        for n_components in range(self.min_n_components, self.max_n_components+1):
+            try: # There is a bug in hlmmlearn, so it must catch exception.
+                model = self.base_model(n_components)
+                this_logL = model.score(self.X, self.lengths)
+
+                n_words = 0
+                others_logL = 0.0
+                for word, (X, lengths) in self.hwords.items():
+                    if word != self.this_word:
+                        n_words += 1
+                        others_logL += model.score(X, lengths)
+                mean_logL = others_logL / float(n_words)
+
+                dic_score = this_logL - mean_logL
+
+                if dic_score > best_dic_score:
+                    best_dic_score = dic_score
+                    best_model = model
+            except Exception:
+                pass
+
+        return best_model
 
 
 class SelectorCV(ModelSelector):
@@ -105,5 +146,27 @@ class SelectorCV(ModelSelector):
     def select(self):
         warnings.filterwarnings("ignore", category=DeprecationWarning)
 
-        # TODO implement model selection using CV
-        raise NotImplementedError
+        best_logL = -np.inf
+        best_model = None
+
+        n_splits = 2
+        split_method = KFold(n_splits=n_splits)
+
+        for n_components in range(self.min_n_components, self.max_n_components+1):
+            try: # There is a bug in hlmmlearn, so it must catch exception.
+                logL = 0.0
+                for cv_train_idx, cv_test_idx in split_method.split(self.sequences):
+                    self.X, self.lengths = combine_sequences(cv_train_idx, self.sequences)
+                    X_test, lengths_test = combine_sequences(cv_test_idx, self.sequences)
+
+                    model = self.base_model(n_components)
+                    logL += model.score(X_test, lengths_test)
+
+                mean_logL = logL/float(n_splits)
+                if mean_logL > best_logL:
+                    best_logL = mean_logL
+                    best_model = model
+            except Exception:
+                pass
+
+        return best_model

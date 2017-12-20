@@ -20,6 +20,24 @@ def recognize(models: dict, test_set: SinglesData):
     warnings.filterwarnings("ignore", category=DeprecationWarning)
     probabilities = []
     guesses = []
-    # TODO implement the recognizer
-    # return probabilities, guesses
-    raise NotImplementedError
+
+    for _, (X, lengths) in test_set.get_all_Xlengths().items():
+        prob_dict = {}
+        best_logL = float("-Inf")
+        best_guess = ""
+        for trained_word, model in models.items():
+            try: # There is a bug in hlmmlearn, so it must catch exception.
+                logL = model.score(X, lengths)
+                prob_dict[trained_word] = logL
+
+            except Exception:
+                prob_dict[trained_word] = float("-Inf")
+
+            if logL > best_logL:
+                best_logL = logL
+                best_guess = trained_word
+
+        probabilities.append(prob_dict)
+        guesses.append(best_guess)
+
+    return probabilities, guesses
